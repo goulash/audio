@@ -13,6 +13,8 @@ package flac
 import (
 	"errors"
 	"io"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -115,10 +117,9 @@ type Metadata struct {
 	raw   map[string][]string
 }
 
-func (m *Metadata) StreamInfo() *StreamInfo { return m.info }
-
-func (m *Metadata) Length() time.Duration { return m.info.Duration() }
-
+func (m *Metadata) Raw() map[string][]string { return m.raw }
+func (m *Metadata) StreamInfo() *StreamInfo  { return m.info }
+func (m *Metadata) Length() time.Duration    { return m.info.Duration() }
 func (m *Metadata) Bitrate(filesize int64) int {
 	z := filesize - m.bytes
 	d := m.Length()
@@ -127,6 +128,31 @@ func (m *Metadata) Bitrate(filesize int64) int {
 		return -1
 	}
 	return int(kbps)
+}
+
+func (m *Metadata) Title() string       { return m.jstr("title", "/") }
+func (m *Metadata) Album() string       { return m.jstr("album", "/") }
+func (m *Metadata) AlbumArtist() string { return m.jstr("albumartist", "/") }
+func (m *Metadata) Composer() string    { return m.jstr("composer", "/") }
+func (m *Metadata) Year() int           { return m.fint("date") }
+func (m *Metadata) Genre() string       { return m.jstr("genre", "/") }
+func (m *Metadata) Track() (int, int)   { return m.fint("tracknumber"), m.fint("tracktotal") }
+func (m *Metadata) Disc() (int, int)    { return m.fint("discnumber"), m.fint("disctotal") }
+func (m *Metadata) Comment() string     { return m.jstr("comment", "\n") }
+func (m *Metadata) Copyright() string   { return m.jstr("copyright", "\n") }
+func (m *Metadata) Website() string     { return m.jstr("contact", "\n") }
+
+func (m *Metadata) jstr(key, split string) string { return strings.Join(m.raw[key], split) }
+func (m *Metadata) fint(key string) int {
+	v, ok := m.raw[key]
+	if !ok {
+		return 0
+	}
+	i, err := strconv.Atoi(v[0])
+	if err != nil {
+		return 0
+	}
+	return i
 }
 
 // Metadata Block Header {{{
@@ -352,9 +378,64 @@ look like:
   contents to the end of the field.
 */
 func readVorbisCommentBlock(r io.Reader, h blockHeader) (map[string][]string, error) {
-	// TODO: not implemented yet
-	_, err := readBytes(r, int(h.Length()))
-	return nil, err
+	tags := make(map[string][]string)
+
+	// Read vendor length and vendor string
+	vl, err := readUint32(r)
+	if err != nil {
+		return nil, err
+	}
+	vs, err := readString(r, int(vl))
+	if err != nil {
+		return nil, err
+	}
+	tags["~vendor"] = []string{vs}
+
+	// Read user comment list length and the tags
+	n, err := readUint32(r)
+	if err != nil {
+		return nil, err
+	}
+
+	// Now I can calculate how many bytes we will at least read
+	bytes := 4 + len(vs) + 4 + int(n)*4 + 1
+	for i := uint32(0); i < n; i++ {
+		z, err := readUint32(r)
+		if err != nil {
+			return nil, err
+		}
+		s, err := readString(r, int(z))
+		if err != nil {
+			return nil, err
+		}
+		bytes += len(s)
+
+		// Split tag on first = sign
+		j := strings.IndexByte(s, '=')
+		if j < 0 {
+			return nil, ErrInvalidStream
+		}
+		key, value := s[:j], s[j+1:]
+		// I could double check that key does indeed only contain the given
+		// fields, but meh.
+		key = strings.ToLower(key)
+		if _, ok := tags[key]; ok {
+			tags[key] = append(tags[key], value)
+		} else {
+			tags[key] = []string{value}
+		}
+	}
+
+	p, err := readUint8(r)
+	if err != nil {
+		return nil, err
+	} else if p&0x80 == 0 {
+		return nil, ErrInvalidStream
+	} else if int(h.Length()) != bytes {
+		return nil, ErrInvalidStream
+	}
+
+	return tags, nil
 }
 
 // }}}
