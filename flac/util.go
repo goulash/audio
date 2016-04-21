@@ -1,0 +1,82 @@
+// Copyright 2016 Ben Morgan. All rights reserved.
+// Use of this source code is governed by an MIT license
+// that can be found in the LICENSE file.
+
+package flac
+
+import (
+	"io"
+	"unsafe"
+)
+
+func readBytes(r io.Reader, n int) ([]byte, error) {
+	buf := make([]byte, n)
+	n, err := r.Read(buf)
+	if n != n || err != nil {
+		return nil, ErrUnexpectedEOF
+	}
+	return buf, nil
+}
+
+func readString(r io.Reader, n int) (string, error) {
+	buf := make([]byte, n)
+	rn, err := r.Read(buf)
+	if rn != n || err != nil {
+		return "", ErrUnexpectedEOF
+	}
+	return string(buf), nil
+}
+
+func readUint8(r io.Reader) (uint8, error) {
+	buf := make([]byte, 1)
+	n, err := r.Read(buf)
+	if n != 1 || err != nil {
+		return 0, ErrUnexpectedEOF
+	}
+	return uint8(buf[0]), nil
+}
+
+func readUint16(r io.Reader) (uint16, error) {
+	buf := make([]byte, 2)
+	n, err := r.Read(buf)
+	if n != 2 || err != nil {
+		return 0, ErrUnexpectedEOF
+	}
+	return *(*uint16)(unsafe.Pointer(&buf[0])), nil
+}
+
+func readUint24(r io.Reader) (uint32, error) {
+	buf := make([]byte, 4)
+	n, err := r.Read(buf[1:])
+	if n != 3 || err != nil {
+		return 0, ErrUnexpectedEOF
+	}
+	return *(*uint32)(unsafe.Pointer(&buf[0])), nil
+}
+
+func readUint32(r io.Reader) (uint32, error) {
+	buf := make([]byte, 4)
+	n, err := r.Read(buf)
+	if n != 4 || err != nil {
+		return 0, ErrUnexpectedEOF
+	}
+	return *(*uint32)(unsafe.Pointer(&buf[0])), nil
+}
+
+func readUint48(r io.Reader) (uint64, error) {
+	buf := make([]byte, 8)
+	n, err := r.Read(buf[2:])
+	if n != 6 || err != nil {
+		return 0, ErrUnexpectedEOF
+	}
+	return *(*uint64)(unsafe.Pointer(&buf[0])), nil
+}
+
+func readUint64(r io.Reader) (uint64, error) {
+	buf := make([]byte, 8)
+	n, err := r.Read(buf)
+	if n != 8 || err != nil {
+		return 0, ErrUnexpectedEOF
+	}
+	return *(*uint64)(unsafe.Pointer(&buf[0])), nil
+}
