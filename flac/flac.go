@@ -6,7 +6,8 @@
 //
 // Reference
 //
-// https://xiph.org/flac/format.html
+//  https://xiph.org/flac/format.html
+//  https://www.xiph.org/vorbis/doc/v-comment.html
 package flac
 
 import (
@@ -274,6 +275,50 @@ func readSeekTableBlock(r io.Reader, h blockHeader) error {
 
 // Metadata Block: VORBIS_COMMENT {{{
 
+/*
+Comment encoding
+
+The comment header logically is a list of eight-bit-clean vectors; the number
+of vectors is bounded to 2^32-1 and the length of each vector is limited to
+2^32-1 bytes. The vector length is encoded; the vector contents themselves are
+not null terminated. In addition to the vector list, there is a single vector
+for vendor name (also 8 bit clean, length encoded in 32 bits). For example, the
+1.0 release of libvorbis set the vendor string to "Xiph.Org libVorbis
+I 20020717".
+
+The comment header is decoded as follows:
+
+    1) [vendor_length] = read an unsigned integer of 32 bits
+    2) [vendor_string] = read a UTF-8 vector as [vendor_length] octets
+    3) [user_comment_list_length] = read an unsigned integer of 32 bits
+    4) iterate [user_comment_list_length] times {
+
+         5) [length] = read an unsigned integer of 32 bits
+         6) this iteration's user comment = read a UTF-8 vector as [length] octets
+
+       }
+
+    7) [framing_bit] = read a single bit as boolean
+    8) if ( [framing_bit] unset or end of packet ) then ERROR
+    9) done.
+
+Content vector format
+
+The comment vectors are structured similarly to a UNIX environment variable.
+That is, comment fields consist of a field name and a corresponding value and
+look like:
+
+    comment[0]="ARTIST=me";
+    comment[1]="TITLE=the sound of Vorbis";
+
+- A case-insensitive field name that may consist of ASCII 0x20 through 0x7D,
+  0x3D ('=') excluded. ASCII 0x41 through 0x5A inclusive (A-Z) is to be
+  considered equivalent to ASCII 0x61 through 0x7A inclusive (a-z).
+- The field name is immediately followed by ASCII 0x3D ('='); this equals
+  sign is used to terminate the field name.
+- 0x3D is followed by the 8 bit clean UTF-8 encoded value of the field
+  contents to the end of the field.
+*/
 func readVorbisCommentBlock(r io.Reader, h blockHeader) (map[string][]string, error) {
 	// TODO: not implemented yet
 	_, err := readBytes(r, int(h.Length()))
