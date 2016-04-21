@@ -6,6 +6,7 @@ package flac
 
 import (
 	"bytes"
+	"encoding/hex"
 	"os"
 	"testing"
 
@@ -95,5 +96,5 @@ func TestFile(z *testing.T) {
 	assert.Equal(si.NumChannels, ti.NumChannels)
 	assert.Equal(si.BitsPerSample, ti.BitsPerSample)
 	assert.Equal(si.TotalSamples, ti.TotalSamples)
-	assert.Equal(si.MD5Sum, ti.MD5Sum)
+	assert.Equal(string(si.MD5Sum), hex.EncodeToString(ti.MD5Sum))
 }

@@ -9,6 +9,9 @@ import (
 	"unsafe"
 )
 
+// TODO: We should see if this is all really as performant as
+// I think it is...
+
 func readBytes(r io.Reader, n int) ([]byte, error) {
 	buf := make([]byte, n)
 	n, err := r.Read(buf)
@@ -42,6 +45,7 @@ func readUint16(r io.Reader) (uint16, error) {
 	if n != 2 || err != nil {
 		return 0, ErrUnexpectedEOF
 	}
+	buf[0], buf[1] = buf[1], buf[0]
 	return *(*uint16)(unsafe.Pointer(&buf[0])), nil
 }
 
@@ -51,6 +55,7 @@ func readUint24(r io.Reader) (uint32, error) {
 	if n != 3 || err != nil {
 		return 0, ErrUnexpectedEOF
 	}
+	buf[0], buf[1], buf[2], buf[3] = buf[3], buf[2], buf[1], buf[0]
 	return *(*uint32)(unsafe.Pointer(&buf[0])), nil
 }
 
@@ -60,6 +65,7 @@ func readUint32(r io.Reader) (uint32, error) {
 	if n != 4 || err != nil {
 		return 0, ErrUnexpectedEOF
 	}
+	buf[0], buf[1], buf[2], buf[3] = buf[3], buf[2], buf[1], buf[0]
 	return *(*uint32)(unsafe.Pointer(&buf[0])), nil
 }
 
@@ -69,6 +75,7 @@ func readUint48(r io.Reader) (uint64, error) {
 	if n != 6 || err != nil {
 		return 0, ErrUnexpectedEOF
 	}
+	buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7] = buf[7], buf[6], buf[5], buf[4], buf[3], buf[2], buf[1], buf[0]
 	return *(*uint64)(unsafe.Pointer(&buf[0])), nil
 }
 
@@ -78,5 +85,6 @@ func readUint64(r io.Reader) (uint64, error) {
 	if n != 8 || err != nil {
 		return 0, ErrUnexpectedEOF
 	}
+	buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7] = buf[7], buf[6], buf[5], buf[4], buf[3], buf[2], buf[1], buf[0]
 	return *(*uint64)(unsafe.Pointer(&buf[0])), nil
 }
