@@ -88,3 +88,48 @@ func readUint64(r io.Reader) (uint64, error) {
 	buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7] = buf[7], buf[6], buf[5], buf[4], buf[3], buf[2], buf[1], buf[0]
 	return *(*uint64)(unsafe.Pointer(&buf[0])), nil
 }
+
+func readUint16LE(r io.Reader) (uint16, error) {
+	buf := make([]byte, 2)
+	n, err := r.Read(buf)
+	if n != 2 || err != nil {
+		return 0, ErrUnexpectedEOF
+	}
+	return *(*uint16)(unsafe.Pointer(&buf[0])), nil
+}
+
+func readUint24LE(r io.Reader) (uint32, error) {
+	buf := make([]byte, 4)
+	n, err := r.Read(buf[1:])
+	if n != 3 || err != nil {
+		return 0, ErrUnexpectedEOF
+	}
+	return *(*uint32)(unsafe.Pointer(&buf[0])), nil
+}
+
+func readUint32LE(r io.Reader) (uint32, error) {
+	buf := make([]byte, 4)
+	n, err := r.Read(buf)
+	if n != 4 || err != nil {
+		return 0, ErrUnexpectedEOF
+	}
+	return *(*uint32)(unsafe.Pointer(&buf[0])), nil
+}
+
+func readUint48LE(r io.Reader) (uint64, error) {
+	buf := make([]byte, 8)
+	n, err := r.Read(buf[2:])
+	if n != 6 || err != nil {
+		return 0, ErrUnexpectedEOF
+	}
+	return *(*uint64)(unsafe.Pointer(&buf[0])), nil
+}
+
+func readUint64LE(r io.Reader) (uint64, error) {
+	buf := make([]byte, 8)
+	n, err := r.Read(buf)
+	if n != 8 || err != nil {
+		return 0, ErrUnexpectedEOF
+	}
+	return *(*uint64)(unsafe.Pointer(&buf[0])), nil
+}

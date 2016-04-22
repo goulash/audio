@@ -138,7 +138,7 @@ func (m *Metadata) Year() int           { return m.fint("date") }
 func (m *Metadata) Genre() string       { return m.jstr("genre", "/") }
 func (m *Metadata) Track() (int, int)   { return m.fint("tracknumber"), m.fint("tracktotal") }
 func (m *Metadata) Disc() (int, int)    { return m.fint("discnumber"), m.fint("disctotal") }
-func (m *Metadata) Comment() string     { return m.jstr("comment", "\n") }
+func (m *Metadata) Comment() string     { return m.jstr("description", "\n") }
 func (m *Metadata) Copyright() string   { return m.jstr("copyright", "\n") }
 func (m *Metadata) Website() string     { return m.jstr("contact", "\n") }
 
@@ -381,7 +381,7 @@ func readVorbisCommentBlock(r io.Reader, h blockHeader) (map[string][]string, er
 	tags := make(map[string][]string)
 
 	// Read vendor length and vendor string
-	vl, err := readUint32(r)
+	vl, err := readUint32LE(r)
 	if err != nil {
 		return nil, err
 	}
@@ -389,53 +389,56 @@ func readVorbisCommentBlock(r io.Reader, h blockHeader) (map[string][]string, er
 	if err != nil {
 		return nil, err
 	}
+	// ~ is not allowed, so there will be no conflicts
 	tags["~vendor"] = []string{vs}
 
 	// Read user comment list length and the tags
-	n, err := readUint32(r)
+	n, err := readUint32LE(r)
 	if err != nil {
 		return nil, err
 	}
 
 	// Now I can calculate how many bytes we will at least read
-	bytes := 4 + len(vs) + 4 + int(n)*4 + 1
+	bytes := 4 + len(vs) + 4 + int(n)*4
 	for i := uint32(0); i < n; i++ {
-		z, err := readUint32(r)
+		k, v, err := readVorbisCommentEntry(r)
 		if err != nil {
 			return nil, err
 		}
-		s, err := readString(r, int(z))
-		if err != nil {
-			return nil, err
-		}
-		bytes += len(s)
+		bytes += len(k) + len(v) + 1
 
-		// Split tag on first = sign
-		j := strings.IndexByte(s, '=')
-		if j < 0 {
-			return nil, ErrInvalidStream
-		}
-		key, value := s[:j], s[j+1:]
-		// I could double check that key does indeed only contain the given
-		// fields, but meh.
-		key = strings.ToLower(key)
-		if _, ok := tags[key]; ok {
-			tags[key] = append(tags[key], value)
+		k = strings.ToLower(k)
+		if _, ok := tags[k]; ok {
+			tags[k] = append(tags[k], v)
 		} else {
-			tags[key] = []string{value}
+			tags[k] = []string{v}
 		}
 	}
 
-	p, err := readUint8(r)
-	if err != nil {
-		return nil, err
-	} else if p&0x80 == 0 {
-		return nil, ErrInvalidStream
-	} else if int(h.Length()) != bytes {
+	if int(h.Length()) != bytes {
 		return nil, ErrInvalidStream
 	}
 
 	return tags, nil
+}
+
+func readVorbisCommentEntry(r io.Reader) (k, v string, err error) {
+	z, err := readUint32LE(r)
+	if err != nil {
+		return "", "", err
+	}
+	s, err := readString(r, int(z))
+	if err != nil {
+		return "", "", err
+	}
+
+	// Split tag on first = sign. I could also double check that key does
+	// indeed only contain the given fields, but meh.
+	i := strings.IndexByte(s, '=')
+	if i < 0 {
+		return "", "", ErrInvalidStream
+	}
+	return s[:i], s[i+1:], nil
 }
 
 // }}}
