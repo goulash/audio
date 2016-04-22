@@ -23,6 +23,16 @@ var (
 	ErrInvalidStream = errors.New("stream is invalid")
 )
 
+func Identify(r io.Reader) (bool, error) {
+	if err := readStreamMarker(r); err != nil {
+		if err == ErrInvalidStream {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 func ReadMetadata(r io.Reader) (*Metadata, error) {
 	err := readStreamMarker(r)
 	if err != nil {
