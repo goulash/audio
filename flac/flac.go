@@ -13,16 +13,26 @@ package flac
 import (
 	"errors"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/goulash/audio"
 )
+
+func init() {
+	audio.MetadataReaders[audio.FLAC] = func(path string) (audio.Metadata, error) {
+		return ReadFileMetadata(path)
+	}
+}
 
 var (
 	ErrUnexpectedEOF = errors.New("unexpected EOF")
 	ErrInvalidStream = errors.New("stream is invalid")
 )
 
+// Identify returns true if the stream looks like a FLAC stream.
 func Identify(r io.Reader) (bool, error) {
 	if err := readStreamMarker(r); err != nil {
 		if err == ErrInvalidStream {
@@ -31,6 +41,25 @@ func Identify(r io.Reader) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func ReadFileMetadata(path string) (*Metadata, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	m, err := ReadMetadata(f)
+	if err != nil {
+		return nil, err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	m.SetFileSize(fi.Size())
+	return m, nil
 }
 
 func ReadMetadata(r io.Reader) (*Metadata, error) {
@@ -121,7 +150,10 @@ func readMetadata(r io.Reader) (*Metadata, error) {
 	return &m, nil
 }
 
+var _ = audio.Metadata(new(Metadata))
+
 type Metadata struct {
+	fsize int64
 	bytes int64
 	info  *StreamInfo
 	raw   map[string][]string
@@ -130,6 +162,18 @@ type Metadata struct {
 func (m *Metadata) Raw() map[string][]string { return m.raw }
 func (m *Metadata) StreamInfo() *StreamInfo  { return m.info }
 func (m *Metadata) Length() time.Duration    { return m.info.Duration() }
+
+func (m *Metadata) Encoding() audio.Codec   { return audio.FLAC }
+func (m *Metadata) EncodedBy() string       { return m.jstr("encoded-by", "/") }
+func (m *Metadata) EncoderSettings() string { return "" } // TODO
+
+func (m *Metadata) SetFileSize(size int64) { m.fsize = size }
+func (m *Metadata) EncodingBitrate() int {
+	if m.fsize == 0 {
+		return 0
+	}
+	return m.Bitrate(m.fsize)
+}
 func (m *Metadata) Bitrate(filesize int64) int {
 	z := filesize - m.bytes
 	d := m.Length()
@@ -140,19 +184,24 @@ func (m *Metadata) Bitrate(filesize int64) int {
 	return int(kbps)
 }
 
-func (m *Metadata) Title() string       { return m.jstr("title", "/") }
-func (m *Metadata) Album() string       { return m.jstr("album", "/") }
-func (m *Metadata) AlbumArtist() string { return m.jstr("albumartist", "/") }
-func (m *Metadata) Composer() string    { return m.jstr("composer", "/") }
-func (m *Metadata) Year() int           { return m.fint("date") }
-func (m *Metadata) Genre() string       { return m.jstr("genre", "/") }
-func (m *Metadata) Track() (int, int)   { return m.fint("tracknumber"), m.fint("tracktotal") }
-func (m *Metadata) Disc() (int, int)    { return m.fint("discnumber"), m.fint("disctotal") }
-func (m *Metadata) Comment() string     { return m.jstr("description", "\n") }
-func (m *Metadata) Copyright() string   { return m.jstr("copyright", "\n") }
-func (m *Metadata) Website() string     { return m.jstr("contact", "\n") }
+func (m *Metadata) Title() string            { return m.jstr("title", "/") }
+func (m *Metadata) Album() string            { return m.jstr("album", "/") }
+func (m *Metadata) AlbumArtist() string      { return m.jstr("albumartist", "/") }
+func (m *Metadata) Artist() string           { return m.jstr("artist", "/") }
+func (m *Metadata) OriginalArtist() string   { return m.jstr("performer", "/") } // FIXME
+func (m *Metadata) Composer() string         { return m.jstr("composer", "/") }
+func (m *Metadata) Year() int                { return m.fint("date") }
+func (m *Metadata) Genre() string            { return m.jstr("genre", "/") }
+func (m *Metadata) Track() (int, int)        { return m.fint("tracknumber"), m.fint("tracktotal") }
+func (m *Metadata) Disc() (int, int)         { return m.fint("discnumber"), m.fint("disctotal") }
+func (m *Metadata) Comment() string          { return m.jstr("description", "\n") }
+func (m *Metadata) Copyright() string        { return m.jstr("copyright", "\n") }
+func (m *Metadata) Website() string          { return m.jstr("contact", "\n") }
+func (m *Metadata) OriginalFilename() string { return "" } // FIXME
 
-func (m *Metadata) jstr(key, split string) string { return strings.Join(m.raw[key], split) }
+func (m *Metadata) jstr(key, split string) string {
+	return strings.Join(m.raw[key], split)
+}
 func (m *Metadata) fint(key string) int {
 	v, ok := m.raw[key]
 	if !ok {
