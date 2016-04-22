@@ -177,7 +177,7 @@ func (m *Metadata) EncodingBitrate() int {
 func (m *Metadata) Bitrate(filesize int64) int {
 	z := filesize - m.bytes
 	d := m.Length()
-	kbps := z / int64(d*1000/time.Second)
+	kbps := (z * 8) / int64(d*1000/time.Second)
 	if kbps <= 0 {
 		return -1
 	}
