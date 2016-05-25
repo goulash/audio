@@ -19,7 +19,14 @@ import (
 	"time"
 
 	"github.com/goulash/audio"
+	"github.com/goulash/stat"
 )
+
+var Stats struct {
+	Identify         stat.Run
+	ReadFileMetadata stat.Run
+	ReadMetadata     stat.Run
+}
 
 func init() {
 	audio.MetadataReaders[audio.FLAC] = func(path string) (audio.Metadata, error) {
@@ -34,6 +41,9 @@ var (
 
 // Identify returns true if the stream looks like a FLAC stream.
 func Identify(r io.Reader) (bool, error) {
+	start := time.Now()
+	defer func() { Stats.Identify.Add(float64(time.Since(start))) }()
+
 	if err := readStreamMarker(r); err != nil {
 		if err == ErrInvalidStream {
 			return false, nil
@@ -44,6 +54,9 @@ func Identify(r io.Reader) (bool, error) {
 }
 
 func ReadFileMetadata(path string) (*Metadata, error) {
+	start := time.Now()
+	defer func() { Stats.ReadFileMetadata.Add(float64(time.Since(start))) }()
+
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -63,6 +76,9 @@ func ReadFileMetadata(path string) (*Metadata, error) {
 }
 
 func ReadMetadata(r io.Reader) (*Metadata, error) {
+	start := time.Now()
+	defer func() { Stats.ReadMetadata.Add(float64(time.Since(start))) }()
+
 	err := readStreamMarker(r)
 	if err != nil {
 		return nil, err
