@@ -10,7 +10,13 @@ import (
 	"time"
 
 	"github.com/dhowden/tag"
+	"github.com/goulash/stat"
 )
+
+var Stats struct {
+	Identify     stat.Run
+	ReadMetadata stat.Run
+}
 
 type Codec int
 
@@ -100,6 +106,9 @@ type Metadata interface {
 }
 
 func Identify(file string) (Codec, error) {
+	start := time.Now()
+	defer func() { Stats.Identify.Add(float64(time.Since(start))) }()
+
 	f, err := os.Open(file)
 	if err != nil {
 		return Unknown, err
@@ -134,6 +143,9 @@ func Identify(file string) (Codec, error) {
 var MetadataReaders = make(map[Codec]func(string) (Metadata, error))
 
 func ReadMetadata(file string) (Metadata, error) {
+	start := time.Now()
+	defer func() { Stats.ReadMetadata.Add(float64(time.Since(start))) }()
+
 	c, err := Identify(file)
 	if err != nil {
 		return nil, err
