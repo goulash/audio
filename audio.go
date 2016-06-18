@@ -82,6 +82,18 @@ func (c Codec) String() string {
 	}
 }
 
+type Format int
+
+const (
+	UnknownFormat = iota
+	ID3v1
+	ID3v2_2
+	ID3v2_3
+	ID3v2_4
+	MP4
+	VORBIS
+)
+
 type Metadata interface {
 	Title() string         // The primary song title
 	Album() string         // The album the song belongs to
