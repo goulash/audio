@@ -5,8 +5,10 @@
 package audio
 
 import (
+	"bytes"
 	"errors"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/dhowden/tag"
@@ -16,6 +18,7 @@ import (
 var Stats struct {
 	Identify     stat.Run
 	ReadMetadata stat.Run
+	Transcode    stat.Run
 }
 
 type Codec int
@@ -34,13 +37,14 @@ const (
 	TTA  // True Audio
 	WMAL // Windows Media Audio Lossless
 
-	MP3 // MPEG-Lyaer 3 Audio
-	M4A // MPEG4 Audio
-	M4B // MPEG4 Audio Book
-	M4P // MPEG4 Protected Audio
-	AAC // Advanced Audio Coding
-	OGG // Vorbis
-	WMA // Windows Media Audio
+	MP3  // MPEG-Layer 3 Audio
+	M4A  // MPEG4 Audio
+	M4B  // MPEG4 Audio Book
+	M4P  // MPEG4 Protected Audio
+	AAC  // Advanced Audio Coding
+	OGG  // Vorbis
+	OPUS // OPUS
+	WMA  // Windows Media Audio
 )
 
 func (c Codec) String() string {
@@ -75,6 +79,8 @@ func (c Codec) String() string {
 		return "AAC"
 	case OGG:
 		return "OGG"
+	case OPUS:
+		return "OPUS"
 	case WMA:
 		return "WMA"
 	default:
@@ -103,6 +109,10 @@ type Metadata interface {
 	EncodingBitrate() int    // Bitrate returns the file bitrate in Kbps, or -1 if unknown.
 
 	OriginalFilename() string // The original filename of the song
+}
+
+func GuessIdentity(file string) Codec {
+	return Unknown
 }
 
 func Identify(file string) (Codec, error) {
@@ -155,4 +165,73 @@ func ReadMetadata(file string) (Metadata, error) {
 		return nil, errors.New("reading metadata for this codec unsupported")
 	}
 	return f(file)
+}
+
+type SystemDecoder interface {
+	DecodeFileToStdout(input string) *exec.Cmd
+}
+
+var SystemDecoders = make(map[Codec]func() SystemDecoder)
+
+type SystemEncoder interface {
+	EncodeStdinToFile(output string, md Metadata) *exec.Cmd
+}
+
+var SystemEncoders = make(map[Codec]func() SystemEncoder)
+
+// Transcode uses registered decoders and encoders to create decoder and encoder commands,
+// which it then passes to TranscodeWith.
+func Transcode(input, output string) ([]byte, error) {
+	start := time.Now()
+	defer func() { Stats.Transcode.Add(float64(time.Since(start))) }()
+
+	md, err := ReadMetadata(input)
+	if err != nil {
+		return nil, err
+	}
+	ic := md.Encoding()
+	decf, ok := SystemDecoders[ic]
+	if !ok {
+		return nil, errors.New("decoding for this codec unsupported")
+	}
+	oc := GuessIdentity(output)
+	encf, ok := SystemEncoders[oc]
+	if !ok {
+		return nil, errors.New("encoding for this codec unsupported")
+	}
+
+	dec := decf().DecodeFileToStdout(input)
+	enc := encf().EncodeStdinToFile(output, md)
+	return TranscodeWith(dec, enc)
+}
+
+// TranscodeWith takes two commands, pipes the output from dec to the input of enc.
+//
+// Ideally, we would like to be able to run both of the commands like:
+//
+//	dec := flac.NewDecoder()
+//  enc := opus.NewEncoder()
+//	audio.TranscodeWith(dec.NewStdoutDecoder(input), enc.NewStdinEncoder(output, audio.ReadMetadata(input)))
+func TranscodeWith(dec, enc *exec.Cmd) ([]byte, error) {
+	// Set up the pipe
+	var err error
+	enc.Stdin, err = dec.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	// Set up the combined output
+	var b bytes.Buffer
+	dec.Stderr = &b
+	enc.Stdout = &b
+	enc.Stderr = &b
+
+	// Run both commands
+	if err := enc.Start(); err != nil {
+		return b.Bytes(), err
+	}
+	if err := dec.Run(); err != nil {
+		return b.Bytes(), err
+	}
+	return b.Bytes(), enc.Wait()
 }
